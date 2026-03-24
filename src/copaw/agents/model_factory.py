@@ -144,6 +144,51 @@ def _create_file_block_support_formatter(
 
             messages = await super()._format(msgs)
 
+            # Strip file blocks from tool_result content before sending to
+            # LLM APIs. File blocks in tool results are used by the renderer
+            # to deliver files to the user, but LLM APIs (e.g. Anthropic) do
+            # not accept "file" type blocks and return 400 errors.
+            for message in messages:
+                content = message.get("content")
+                if not isinstance(content, list):
+                    continue
+                for item in content:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("type") != "tool_result":
+                        continue
+                    item_content = item.get("content")
+                    if not isinstance(item_content, list):
+                        continue
+                    new_content = []
+                    for block in item_content:
+                        if (
+                            isinstance(block, dict)
+                            and block.get("type") == "file"
+                        ):
+                            source = block.get("source") or {}
+                            file_path = (
+                                source.get("url", "")
+                                or source.get("data", "")
+                            )
+                            file_name = (
+                                block.get("filename")
+                                or block.get("name")
+                                or file_path
+                            )
+                            new_content.append(
+                                {
+                                    "type": "text",
+                                    "text": (
+                                        f"File '{file_name}' sent to user "
+                                        f"from: {file_path}"
+                                    ),
+                                }
+                            )
+                        else:
+                            new_content.append(block)
+                    item["content"] = new_content
+
             if extra_contents:
                 for message in messages:
                     for tc in message.get("tool_calls", []):
@@ -225,17 +270,23 @@ def _create_file_block_support_formatter(
                         ) from e
 
                     if block["type"] == "file":
-                        file_path = block.get("path", "") or block.get(
-                            "url",
-                            "",
+                        source = block.get("source") or {}
+                        file_path = (
+                            source.get("url", "")
+                            or source.get("data", "")
+                            or block.get("path", "")
+                            or block.get("url", "")
                         )
-                        file_name = block.get("name", file_path)
+                        file_name = (
+                            block.get("filename")
+                            or block.get("name")
+                            or file_path
+                        )
 
                         textual_output.append(
                             f"The returned file '{file_name}' "
                             f"can be found at: {file_path}",
                         )
-                        multimodal_data.append((file_path, block))
                     else:
                         # Delegate other block types to parent class
                         (

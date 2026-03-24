@@ -48,16 +48,30 @@ class MCPClientManager:
                 logger.debug(f"MCP client '{key}' is disabled, skipping")
                 continue
 
-            try:
-                await self._add_client(key, client_config)
-                logger.debug(f"MCP client '{key}' initialized successfully")
-            except BaseException as e:
-                if isinstance(e, (KeyboardInterrupt, SystemExit)):
-                    raise
-                logger.warning(
-                    f"Failed to initialize MCP client '{key}': {e}",
-                    exc_info=True,
-                )
+            max_attempts = 3
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    await self._add_client(key, client_config)
+                    logger.debug(
+                        f"MCP client '{key}' initialized successfully"
+                        + (f" (attempt {attempt})" if attempt > 1 else "")
+                    )
+                    break
+                except BaseException as e:
+                    if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                        raise
+                    if attempt < max_attempts:
+                        logger.debug(
+                            f"MCP client '{key}' init attempt {attempt} failed"
+                            f": {e}, retrying in 2s..."
+                        )
+                        await asyncio.sleep(2)
+                    else:
+                        logger.warning(
+                            f"Failed to initialize MCP client '{key}'"
+                            f" after {max_attempts} attempts: {e}",
+                            exc_info=True,
+                        )
 
     async def get_clients(self) -> List[Any]:
         """Get list of all active MCP clients.

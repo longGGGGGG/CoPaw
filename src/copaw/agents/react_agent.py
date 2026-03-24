@@ -573,7 +573,7 @@ class CoPawAgent(ToolGuardMixin, ReActAgent):
     # video) from memory and retry when the model rejects them.
     # ------------------------------------------------------------------
 
-    _MEDIA_BLOCK_TYPES = {"image", "audio", "video"}
+    _MEDIA_BLOCK_TYPES = {"image", "audio", "video", "file"}
 
     def _proactive_strip_media_blocks(self) -> int:
         """Proactively strip media blocks from memory before model call.
